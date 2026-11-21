@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="top">
+  <h1>☁️ Cloud DevOps Capstone</h1>
+  <form method="post" action="{{ url_for('logout') }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <span class="meta">Logged in as <strong>{{ user }}</strong></span>
+    <button class="link" type="submit">Log out</button>
+  </form>
+</div>
+<div class="badges">
+  <span>Dockerized Flask</span>
+  <span>CI/CD: GitHub Actions</span>
+  <span>Managed DB: {{ db }}</span>
+  <span>Env: {{ env }}</span>
+  <span><a href="/health">/health</a></span>
+  <span><a href="/metrics">/metrics</a></span>
+</div>
+
+<div class="card">
+  <h3>Leave a message</h3>
+  <form method="post" action="{{ url_for('add') }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <textarea name="body" rows="3" placeholder="Your message" maxlength="500" required></textarea>
+    <button type="submit">Post as {{ user }}</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3>Messages stored in the cloud database</h3>
+  {% for m in messages %}
+    <div class="msg"><strong>{{ m.name }}</strong>
+      <div>{{ m.body }}</div>
+      <div class="meta">{{ m.created_at }}</div></div>
+  {% else %}
+    <p class="meta">No messages yet. Be the first!</p>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,17 @@
+# Render Blueprint: the cloud web service, built from the Dockerfile in this repo.
+# The database is NOT created here: Render allows only one free PostgreSQL per
+# account, so the existing free database is connected through DATABASE_URL.
+services:
+  - type: web
+    name: cloud-devops-capstone
+    runtime: docker
+    plan: free
+    autoDeploy: false          # deploys are triggered by the GitHub Actions pipeline
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false            # you paste the database URL once in the Render dashboard

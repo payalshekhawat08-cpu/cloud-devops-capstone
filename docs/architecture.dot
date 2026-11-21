@@ -1,0 +1,34 @@
+digraph G {
+  rankdir=LR; splines=true; nodesep=0.5; ranksep=0.9;
+  fontname="Helvetica"; bgcolor="white"; pad=0.3;
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=12, margin="0.2,0.12"];
+  edge [fontname="Helvetica", fontsize=10, color="#475569"];
+
+  dev   [label="Developer\nPayal Shekhawat\n(VS Code, GitHub web upload)", fillcolor="#e0e7ff"];
+  users [label="Users\n(browser over HTTPS)", fillcolor="#e0e7ff"];
+
+  subgraph cluster_gh {
+    label="GitHub (source + CI/CD)"; style="rounded,filled"; fillcolor="#f1f5f9"; color="#94a3b8"; fontname="Helvetica-Bold";
+    repo [label="GitHub Repository\n(main branch)", fillcolor="#ffffff"];
+    ci   [label="GitHub Actions: CI/CD\n1. Build and test (flake8, pytest)\n2. Docker build + container smoke test\n3. Push image to GHCR\n4. Deploy hook + verify commit", fillcolor="#dbeafe"];
+    ghcr [label="GHCR\nDocker image registry", fillcolor="#ffffff"];
+    mon  [label="Uptime Monitor workflow\n(checks /health every 30 min,\nemails on failure)", fillcolor="#fef3c7"];
+  }
+
+  subgraph cluster_render {
+    label="Render cloud (free tier)"; style="rounded,filled"; fillcolor="#f0fdf4"; color="#86efac"; fontname="Helvetica-Bold";
+    web [label="Web Service (Docker container)\nGunicorn + Flask\nLogin / auth, /health, /metrics", fillcolor="#bbf7d0"];
+    db  [label="Managed PostgreSQL\n(users, messages)", fillcolor="#bbf7d0", shape=cylinder];
+    obs [label="Render Logs and Metrics\n(application logs, CPU, memory)", fillcolor="#fef3c7"];
+  }
+
+  dev   -> repo [label="push code"];
+  repo  -> ci   [label="triggers on push"];
+  ci    -> ghcr [label="push image"];
+  ci    -> web  [label="deploy hook\n(builds Dockerfile)"];
+  users -> web  [label="HTTPS"];
+  web   -> db   [label="SQL (DATABASE_URL)"];
+  web   -> obs  [label="stdout logs"];
+  mon   -> web  [label="GET /health", style=dashed];
+  ci    -> web  [label="verify /health\nreports new commit", style=dashed, constraint=false];
+}

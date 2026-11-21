@@ -1,0 +1,36 @@
+# Local full stack: web app + PostgreSQL.  Start with:  docker compose up --build
+# Then open http://localhost:5000
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: appdb
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdevpassword}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appuser -d appdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      args:
+        GIT_SHA: local
+    ports:
+      - "5000:5000"
+    environment:
+      APP_ENV: development
+      SECRET_KEY: ${SECRET_KEY:-dev-only-change-me}
+      DATABASE_URL: postgresql://appuser:${POSTGRES_PASSWORD:-localdevpassword}@db:5432/appdb
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
