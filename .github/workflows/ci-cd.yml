@@ -1,0 +1,121 @@
+name: CI/CD Pipeline
+
+# Runs on every push / pull request to main. Deploys only from main.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 1) BUILD + TEST: install dependencies, lint, run automated tests
+  test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest flake8
+      - name: Lint
+        run: flake8 --max-line-length 100 app.py tests
+      - name: Run tests
+        run: pytest -q
+
+  # 2) DOCKER: build the image, smoke-test the container, push to GHCR (main only)
+  docker:
+    name: Docker image
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Set image name (lowercase)
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: capstone:ci
+          build-args: GIT_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test the container
+        run: |
+          docker run -d --name smoke -p 5000:5000 -e APP_ENV=development capstone:ci
+          for i in $(seq 1 20); do
+            if curl -fsS http://localhost:5000/health; then echo; exit 0; fi
+            sleep 3
+          done
+          docker logs smoke
+          exit 1
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push image
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.sha }}
+          build-args: GIT_SHA=${{ github.sha }}
+          cache-from: type=gha
+
+  # 3) DEPLOY: trigger Render, then check the live site runs this exact commit
+  deploy:
+    name: Deploy to Render
+    needs: docker
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+      APP_URL: ${{ vars.APP_URL }}
+    steps:
+      - name: Trigger Render deploy
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::warning::Secret RENDER_DEPLOY_HOOK is not set, skipping deploy."
+            exit 0
+          fi
+          curl -fsS -X POST "$HOOK" > /dev/null
+          echo "Deploy triggered on Render."
+      - name: Verify the live site runs this commit
+        run: |
+          if [ -z "$HOOK" ] || [ -z "$APP_URL" ]; then
+            echo "::warning::HOOK or APP_URL not set, skipping verification."
+            exit 0
+          fi
+          # Render needs a few minutes to build; poll for up to ~13 minutes.
+          for i in $(seq 1 40); do
+            body=$(curl -fsS --max-time 30 "$APP_URL/health" || true)
+            echo "attempt $i: $body"
+            if echo "$body" | grep -q "$GITHUB_SHA"; then
+              echo "Live site is running commit $GITHUB_SHA"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "::error::Live site did not report commit $GITHUB_SHA in time."
+          exit 1
