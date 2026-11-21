@@ -2,7 +2,7 @@
 
 A small but complete web application taken through the full DevOps life cycle: **Git → CI/CD pipeline → Docker → cloud deployment → managed database → monitoring**.
 
-**Live website:** https://cloud-devops-capstone.onrender.com/
+**Live website:** https://cloud-devops-capstone-l84f.onrender.com
 (free tier: if the site was idle, the first load can take about a minute to wake up)
 
 **Author:** Payal Shekhawat
